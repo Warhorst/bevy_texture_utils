@@ -5,8 +5,6 @@ use bevy_render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy_render::texture::TextureFormatPixelInfo;
 use pad::{p, Position};
 
-// TODO: Make sure every image uses the same TextureFormat
-
 /// Creates tile map textures.
 pub struct TileMapTextureCreator {
     /// The expected texture format of every image
@@ -30,10 +28,19 @@ impl TileMapTextureCreator {
         &self,
         images: &mut Assets<Image>,
         positions_and_textures: impl IntoIterator<Item=(Position, Handle<Image>)>,
-    ) -> Result<Handle<Image>, &'static str> {
+    ) -> Result<Handle<Image>, String> {
         let position_texture_map = positions_and_textures
             .into_iter()
-            .collect::<HashMap<_, _>>();
+            .map(|(pos, handle)| {
+                // todo verify the image is present (and maybe use it directly here)
+                let texture = images.get(handle.id()).unwrap();
+
+                match texture.texture_descriptor.format == self.texture_format {
+                    true => Ok((pos, handle)),
+                    false => Err(format!("Not all textures have the configured texture format '{:?}'.", self.texture_format))
+                }
+            })
+            .collect::<Result<HashMap<_, _>, String>>()?;
 
         let max_x = Self::get_max_x(&position_texture_map)?;
         let min_x = Self::get_min_x(&position_texture_map)?;
@@ -53,7 +60,7 @@ impl TileMapTextureCreator {
                 let image = match position_texture_map.get(&absolute_pos) {
                     Some(handle) => match images.get(handle) {
                         Some(image) => image,
-                        None => return Err("Not every image was already loaded")
+                        None => return Err("Not every image was already loaded".to_string())
                     },
                     None => continue,
                 };
@@ -219,6 +226,48 @@ mod tests {
             &images.get(new_image_handle).unwrap().data,
             &expected_image.data
         );
+    }
+
+    /// If the texture format does not match the configured format, an error should be returned indicating
+    /// that.
+    #[test]
+    fn create_tile_map_texture_with_different_formats_fails() {
+        // arrange
+        let creator = TileMapTextureCreator::new(TextureFormat::Rgba8UnormSrgb, 2, 2);
+        let mut images = Assets::<Image>::default();
+        let red = images.add(create_image(
+            (2, 2),
+            TextureFormat::Rgba8Unorm,
+            [
+                Color::RED, Color::RED,
+                Color::RED,Color::RED
+            ]
+        ));
+        let green = images.add(create_image(
+            (2, 2),
+            TextureFormat::Rgba8Sint,
+            [
+                Color::GREEN, Color::GREEN,
+                Color::GREEN,Color::GREEN
+            ]
+        ));
+
+        // act
+        let image_result = creator.create_tile_map_texture(
+            &mut images,
+            [
+                (p!(0, 0), red.clone()),
+                (p!(1, 0), green.clone()),
+                (p!(0, 1), green),
+                (p!(1, 1), red),
+            ]
+        );
+
+        // assert
+        assert!(image_result.is_err());
+        let message = image_result.unwrap_err();
+
+        assert_eq!("Not all textures have the configured texture format 'Rgba8UnormSrgb'.", message)
     }
 
     /// Create an image with the given dimension, texture format and colors for each pixel.
