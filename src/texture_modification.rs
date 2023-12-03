@@ -1,5 +1,4 @@
 use bevy_render::prelude::*;
-use bevy_render::render_resource::Texture;
 
 pub type PixelBytes = [u8; 4];
 
