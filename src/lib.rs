@@ -14,7 +14,7 @@ pub struct TileMapTextureCreator {
     /// The expected width of each tile texture
     tile_width: usize,
     /// The expected height of each tile texture
-    tile_height: usize
+    tile_height: usize,
 }
 
 impl TileMapTextureCreator {
@@ -32,20 +32,24 @@ impl TileMapTextureCreator {
         let position_texture_map = positions_and_textures
             .into_iter()
             .map(|(pos, handle)| {
-                // todo verify the image is present (and maybe use it directly here)
-                let texture = images.get(handle.id()).unwrap();
+                let texture = match images.get(handle.id()) {
+                    Some(t) => t,
+                    None => {
+                        return Err("Not all textures are loaded yet.".to_string())
+                    }
+                };
 
                 match texture.texture_descriptor.format == self.texture_format {
-                    true => Ok((pos, handle)),
+                    true => Ok((pos, texture)),
                     false => Err(format!("Not all textures have the configured texture format '{:?}'.", self.texture_format))
                 }
             })
-            .collect::<Result<HashMap<_, _>, String>>()?;
+            .collect::<Result<HashMap<Position, &Image>, String>>()?;
 
-        let max_x = Self::get_max_x(&position_texture_map)?;
-        let min_x = Self::get_min_x(&position_texture_map)?;
-        let max_y = Self::get_max_y(&position_texture_map)?;
-        let min_y = Self::get_min_y(&position_texture_map)?;
+        let max_x = Self::get_max_x(position_texture_map.keys())?;
+        let min_x = Self::get_min_x(position_texture_map.keys())?;
+        let max_y = Self::get_max_y(position_texture_map.keys())?;
+        let min_y = Self::get_min_y(position_texture_map.keys())?;
 
         let width = (max_x - min_x) + 1;
         let height = (max_y - min_y) + 1;
@@ -58,10 +62,7 @@ impl TileMapTextureCreator {
                 let relative_pos = p!(x - min_x, max_y - y);
 
                 let image = match position_texture_map.get(&absolute_pos) {
-                    Some(handle) => match images.get(handle) {
-                        Some(image) => image,
-                        None => return Err("Not every image was already loaded".to_string())
-                    },
+                    Some(image) => image,
                     None => continue,
                 };
 
@@ -75,9 +76,9 @@ impl TileMapTextureCreator {
         Ok(images.add(tiles_texture))
     }
 
-    fn get_max_x(position_texture_map: &HashMap<Position, Handle<Image>>) -> Result<usize, &'static str> {
-        let max_opt = position_texture_map
-            .keys()
+    fn get_max_x<'a>(positions: impl IntoIterator<Item=&'a Position>) -> Result<usize, &'static str> {
+        let max_opt = positions
+            .into_iter()
             .map(|pos| pos.x)
             .max();
 
@@ -89,9 +90,9 @@ impl TileMapTextureCreator {
         Ok(max as usize)
     }
 
-    fn get_min_x(position_texture_map: &HashMap<Position, Handle<Image>>) -> Result<usize, &'static str> {
-        let min_opt = position_texture_map
-            .keys()
+    fn get_min_x<'a>(positions: impl IntoIterator<Item=&'a Position>) -> Result<usize, &'static str> {
+        let min_opt = positions
+            .into_iter()
             .map(|pos| pos.x)
             .min();
 
@@ -103,9 +104,9 @@ impl TileMapTextureCreator {
         Ok(min as usize)
     }
 
-    fn get_max_y(position_texture_map: &HashMap<Position, Handle<Image>>) -> Result<usize, &'static str> {
-        let max_opt = position_texture_map
-            .keys()
+    fn get_max_y<'a>(positions: impl IntoIterator<Item=&'a Position>) -> Result<usize, &'static str> {
+        let max_opt = positions
+            .into_iter()
             .map(|pos| pos.y)
             .max();
 
@@ -117,9 +118,9 @@ impl TileMapTextureCreator {
         Ok(max as usize)
     }
 
-    fn get_min_y(position_texture_map: &HashMap<Position, Handle<Image>>) -> Result<usize, &'static str> {
-        let min_opt = position_texture_map
-            .keys()
+    fn get_min_y<'a>(positions: impl IntoIterator<Item=&'a Position>) -> Result<usize, &'static str> {
+        let min_opt = positions
+            .into_iter()
             .map(|pos| pos.y)
             .min();
 
@@ -165,13 +166,13 @@ impl TileMapTextureCreator {
 }
 
 
-
 #[cfg(test)]
 mod tests {
     use pad::p;
     use bevy_asset::prelude::*;
     use bevy_render::prelude::*;
     use bevy_render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    use uuid::Uuid;
     use crate::{TileMapTextureCreator};
 
     #[test]
@@ -184,16 +185,16 @@ mod tests {
             TextureFormat::Rgba8UnormSrgb,
             [
                 Color::RED, Color::RED,
-                Color::RED,Color::RED
-            ]
+                Color::RED, Color::RED
+            ],
         ));
         let green = images.add(create_image(
             (2, 2),
             TextureFormat::Rgba8UnormSrgb,
             [
                 Color::GREEN, Color::GREEN,
-                Color::GREEN,Color::GREEN
-            ]
+                Color::GREEN, Color::GREEN
+            ],
         ));
 
         // act
@@ -204,7 +205,7 @@ mod tests {
                 (p!(1, 0), green.clone()),
                 (p!(0, 1), green),
                 (p!(1, 1), red),
-            ]
+            ],
         );
 
         // assert
@@ -219,7 +220,7 @@ mod tests {
                 Color::GREEN, Color::GREEN, Color::RED, Color::RED,
                 Color::RED, Color::RED, Color::GREEN, Color::GREEN,
                 Color::RED, Color::RED, Color::GREEN, Color::GREEN,
-            ]
+            ],
         );
 
         assert_eq!(
@@ -240,27 +241,14 @@ mod tests {
             TextureFormat::Rgba8Unorm,
             [
                 Color::RED, Color::RED,
-                Color::RED,Color::RED
-            ]
-        ));
-        let green = images.add(create_image(
-            (2, 2),
-            TextureFormat::Rgba8Sint,
-            [
-                Color::GREEN, Color::GREEN,
-                Color::GREEN,Color::GREEN
-            ]
+                Color::RED, Color::RED
+            ],
         ));
 
         // act
         let image_result = creator.create_tile_map_texture(
             &mut images,
-            [
-                (p!(0, 0), red.clone()),
-                (p!(1, 0), green.clone()),
-                (p!(0, 1), green),
-                (p!(1, 1), red),
-            ]
+            [(p!(0, 0), red)],
         );
 
         // assert
@@ -270,13 +258,33 @@ mod tests {
         assert_eq!("Not all textures have the configured texture format 'Rgba8UnormSrgb'.", message)
     }
 
+    /// Providing handles to textures that are not loaded yet results in an error.
+    #[test]
+    fn create_tile_map_texture_with_not_loaded_textures_fails() {
+        // arrange
+        let creator = TileMapTextureCreator::new(TextureFormat::Rgba8UnormSrgb, 2, 2);
+        let mut images = Assets::<Image>::default();
+
+        // act
+        let image_result = creator.create_tile_map_texture(
+            &mut images,
+            [(p!(0, 0), Handle::Weak(AssetId::<Image>::Uuid { uuid: Uuid::default() }))],
+        );
+
+        // assert
+        assert!(image_result.is_err());
+        let message = image_result.unwrap_err();
+
+        assert_eq!("Not all textures are loaded yet.", message)
+    }
+
     /// Create an image with the given dimension, texture format and colors for each pixel.
     /// Dimension and given pixel must match in size. The first pixel is top left of the image
     /// and the last one is bottom right.
     fn create_image(
         (width, height): (usize, usize),
         texture_format: TextureFormat,
-        pixel_colors: impl IntoIterator<Item=Color>
+        pixel_colors: impl IntoIterator<Item=Color>,
     ) -> Image {
         let data = pixel_colors
             .into_iter()

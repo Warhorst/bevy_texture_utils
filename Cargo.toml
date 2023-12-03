@@ -7,3 +7,4 @@ edition = "2021"
 bevy_asset = "0.12.0"
 bevy_render = "0.12.0"
 pad = { git = "https://github.com/Warhorst/pad.git" }
+uuid = { version = "1.6.1", features = ["v4"] }
