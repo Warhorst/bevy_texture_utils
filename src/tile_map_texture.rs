@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+
 use bevy_asset::prelude::*;
 use bevy_render::prelude::*;
 use bevy_render::render_resource::{Extent3d, TextureDimension, TextureFormat};
@@ -24,6 +25,11 @@ impl TileMapTextureCreator {
 
     /// Combine multiple given textures to a single one, forming
     /// a tile map texture.
+    /// The images are used to get the textures for the given handles and also to store the resulting texture,
+    /// producing a new handle.
+    /// positions_and_textures tells at which position in the tile map each texture should be. The positions
+    /// are interpreted like a mathematical coordinate system: position (0, 0) is bottom left and position
+    /// (m, n) is top right, where m >= 0 and n >= 0.
     pub fn create_tile_map_texture(
         &self,
         images: &mut Assets<Image>,
@@ -169,12 +175,14 @@ impl TileMapTextureCreator {
 
 #[cfg(test)]
 mod tests {
-    use pad::p;
     use bevy_asset::prelude::*;
     use bevy_render::prelude::*;
-    use bevy_render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    use bevy_render::render_resource::TextureFormat;
+    use pad::p;
     use uuid::Uuid;
+
     use crate::tile_map_texture::TileMapTextureCreator;
+    use crate::test_utils::create_image;
 
     #[test]
     fn create_tile_map_texture_works() {
@@ -277,34 +285,5 @@ mod tests {
         let message = image_result.unwrap_err();
 
         assert_eq!("Not all textures are loaded yet.", message)
-    }
-
-    /// Create an image with the given dimension, texture format and colors for each pixel.
-    /// Dimension and given pixel must match in size. The first pixel is top left of the image
-    /// and the last one is bottom right.
-    fn create_image(
-        (width, height): (usize, usize),
-        texture_format: TextureFormat,
-        pixel_colors: impl IntoIterator<Item=Color>,
-    ) -> Image {
-        let data = pixel_colors
-            .into_iter()
-            .flat_map(|c| c.as_rgba_u8())
-            .collect::<Vec<_>>();
-
-        if data.len() / 4 != width * height {
-            panic!("Given data and dimension don't match!")
-        }
-
-        Image::new(
-            Extent3d {
-                width: width as u32,
-                height: height as u32,
-                depth_or_array_layers: 1,
-            },
-            TextureDimension::D2,
-            data,
-            texture_format,
-        )
     }
 }
