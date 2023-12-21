@@ -36,29 +36,29 @@ pub fn mash_textures(
 
     offsets_textures.sort_by(|(offset_0, _), (offset_1, _)| offset_0.z.cmp(&offset_1.z));
 
-    let width = offsets_textures
+    let image_width = offsets_textures
         .iter()
         .map(|(ofs, txt)| ofs.x + txt.width() as usize)
         .max()
         .ok_or("No texture handles were provided")?;
 
-    let height = offsets_textures
+    let image_height = offsets_textures
         .iter()
-        .map(|(ofs, txt)| ofs.y + txt.width() as usize)
+        .map(|(ofs, txt)| ofs.y + txt.height() as usize)
         .max()
         .ok_or("No texture handles were provided")?;
 
-    let mut image_data = vec![0; width * height * 4];
+    let mut image_data = vec![0; image_width * image_height * 4];
 
     for (offset, texture) in offsets_textures {
         let data = &texture.data;
-        let width = texture.width() as usize;
-        let height = texture.height() as usize;
+        let part_width = texture.width() as usize;
+        let part_height = texture.height() as usize;
 
-        for y in 0..height {
-            for x in 0..width {
-                let mash_texture_index = width * 4 * (y + offset.y) + (x + offset.x) * 4;
-                let part_texture_index = width * 4 * y + x * 4;
+        for y in 0..part_height {
+            for x in 0..part_width {
+                let mash_texture_index = image_width * 4 * (y + offset.y) + (x + offset.x) * 4;
+                let part_texture_index = part_width * 4 * y + x * 4;
 
                 image_data[mash_texture_index] = data[part_texture_index];
                 image_data[mash_texture_index + 1] = data[part_texture_index + 1];
@@ -70,8 +70,8 @@ pub fn mash_textures(
 
     let image = Image::new(
         Extent3d {
-            width: width as u32,
-            height: height as u32,
+            width: image_width as u32,
+            height: image_height as u32,
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
